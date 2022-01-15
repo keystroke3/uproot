@@ -4,7 +4,7 @@ of operation or another specified directory.
     """
 import argparse
 from hashlib import new
-from operator import ne
+from operator import ne, truediv
 import os
 import shutil
 from os.path import join, exists, abspath, isdir
@@ -18,7 +18,10 @@ def move_or_copy(oldpath, newpath, copy, v: bool = False):
     if copy:
         if v:
             print(f"Copy: {oldpath} --> {newpath}")
-        shutil.copy2(oldpath, newpath)
+        try:
+            shutil.copy2(oldpath, newpath, follow_symlinks=True)
+        except IsADirectoryError:
+            shutil.copytree(oldpath, newpath, symlinks=True)
         return
     if v:
         print(f"Move: {oldpath} --> {newpath}")
@@ -43,29 +46,35 @@ def move_files(source, output, copy, v):
             move_or_copy(oldpath, newpath, copy, v)
 
 
-def clean_empty_folders(path, remove_root=True):
+def clean_empty_folders(root_path, remove_root=False, new_path=None):
+    path = new_path if new_path is not None else root_path
     if not isdir(path):
+        print("not dir")
         return
     files = os.listdir(path)
     if len(files):
         for f in files:
-            fullpath = os.path.join(path, f)
-            if os.path.isdir(fullpath):
-                clean_empty_folders(fullpath)
-    files = os.listdir(path)
-    if len(files) == 0 and remove_root:
-        os.rmdir(path)
+            fullpath = join(path, f)
+            if isdir(fullpath):
+                clean_empty_folders(root_path, remove_root, new_path=fullpath)
+    if exists(path):
+        files = os.listdir(path)
+        if len(files) == 0:
+            os.rmdir(path)
+        if remove_root and len(os.listdir(root_path)) == 0:
+            os.rmdir(root_path)
 
 
 def uproot(
     source: str = None,
     output: str = None,
     clean: bool = False,
+    clean_all: bool = False,
     copy: bool = False,
     dirs: bool = False,
     v: bool = False,
 ):
-    """Moves files from deeply nested dirs to work or ouptut dir
+    """Moves files from deeply nested dirs to work or output dir
 
     Args:
         source (str, optional): The working directory. Defaults to None.
@@ -86,21 +95,27 @@ def uproot(
     output = abspath(output) if output else source
     if not isdir(source):
         print(f"{source} is not a directory")
-        return
+        return 1
     if output and not isdir(output):
         print(f"{output} is not a directory")
-        return
+        return 1
 
     if source and output:
         if (len(source) < len(output)) and (source in output):
             print("Output folder cannot be inside source path")
-            return
+            return 1
     if dirs:
         move_dirs(source, output, copy, v)
     else:
-        move_dirs(source, output, copy, v)
+        move_files(source, output, copy, v)
     if clean:
+        if v:
+            print("Cleaning empty folders..")
         clean_empty_folders(source)
+    if clean_all:
+        if v:
+            print("Cleaning removing empty source ..")
+        clean_empty_folders(source, True)
 
 
 def main():
@@ -132,6 +147,12 @@ def main():
         help="Specifies if the empty directories should be cleared after moving. Defaults to false if this flag is not set.",
     )
     parser.add_argument(
+        "-R",
+        "--remove_empty_source",
+        action="store_true",
+        help="same as --remove_empty but also removes the source directory itself.",
+    )
+    parser.add_argument(
         "-c",
         "--copy",
         action="store_true",
@@ -155,12 +176,13 @@ def main():
     if args.make_output:
         if not exists(abspath(args.make_output)):
             if args.verbose:
-                print(f"{args.make_ouptut} does not exists. Creating...")
+                print(f"{args.make_output} does not exists. Creating...")
             os.mkdir(abspath(args.make_output))
     uproot(
         source=args.source or unknown or None,
         output=args.output or args.make_output,
         clean=args.remove_empty,
+        clean_all=args.remove_empty_source,
         copy=args.copy,
         dirs=args.directories,
         v=args.verbose,
