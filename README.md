@@ -125,4 +125,4 @@ A GUI will also be nice so people don't have to use a terminal for to run the sc
 Do you have any more things you can add to the program, fork it, fix it add it and create a pull request.
 
 ### Donation
-If you like the project and would like to support me for some reason: [PayPal me](https://paypal.com/keystroke33@gmail.com)
+If you like the project and would like to support me for some reason: PayPal me: `keystroke33@gmail.com`
